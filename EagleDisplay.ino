@@ -251,18 +251,18 @@ static void sendTelemetry(float co2, float tempC, float rh) {
   char buf[16];
 
   // Temperature
-  udpTx.beginPacket(ip, cfg.udpTargetPort);
-  udpTx.write("T");
-  dtostrf(tempC, 0, 2, buf);
-  udpTx.write((const uint8_t*)buf, strlen(buf));
-  udpTx.endPacket();
+  //udpTx.beginPacket(ip, cfg.udpTargetPort);
+  //udpTx.write("T");
+  //dtostrf(tempC, 0, 2, buf);
+  //udpTx.write((const uint8_t*)buf, strlen(buf));
+  //udpTx.endPacket();
 
   // Humidity
-  udpTx.beginPacket(ip, cfg.udpTargetPort);
-  udpTx.write("H");
-  dtostrf(rh, 0, 2, buf);
-  udpTx.write((const uint8_t*)buf, strlen(buf));
-  udpTx.endPacket();
+  //udpTx.beginPacket(ip, cfg.udpTargetPort);
+  //udpTx.write("H");
+  //dtostrf(rh, 0, 2, buf);
+  //udpTx.write((const uint8_t*)buf, strlen(buf));
+  //udpTx.endPacket();
 
   // CO2
   udpTx.beginPacket(ip, cfg.udpTargetPort);
@@ -277,24 +277,38 @@ static void pollUdpBrightness() {
   int packetSize = udpRx.parsePacket();
   if (packetSize <= 0) return;
 
-  char msg[32] = {0};
+  char msg[32];
   int n = udpRx.read(msg, sizeof(msg) - 1);
   if (n <= 0) return;
+  msg[n] = '\0';  // ensure termination for ASCII parsing
 
-  // Accept either single byte 0..100 or ASCII "0..100"
   int value = -1;
-  if (n == 1 && (uint8_t)msg[0] <= 100) {
-    value = (uint8_t)msg[0];
+
+  // --- Try ASCII decimal first: handles "0", "100", "42\n", " 7 "
+  int i = 0;
+  while (i < n && (msg[i] == ' ' || msg[i] == '\t' || msg[i] == '\r' || msg[i] == '\n')) i++;  // trim left
+  bool hasDigits = false;
+  long acc = 0;
+  while (i < n && msg[i] >= '0' && msg[i] <= '9') { hasDigits = true; acc = acc * 10 + (msg[i] - '0'); i++; }
+  while (i < n && (msg[i] == ' ' || msg[i] == '\t' || msg[i] == '\r' || msg[i] == '\n')) i++;  // trim right
+
+  if (hasDigits && i == n) {
+    value = (int)acc;                       // parsed ASCII number
+  } else if (n == 1) {
+    value = (uint8_t)msg[0];                // fall back to raw single-byte (0..100)
   } else {
-    value = atoi(msg);
+    return;                                  // unrecognized payload
   }
 
-  if (value < 0) return;
+  if (value < 0)   value = 0;
   if (value > 100) value = 100;
 
-  currentBrightness = (uint8_t)value;
-  applyBrightness(currentBrightness);
+  if (currentBrightness != (uint8_t)value) {
+    currentBrightness = (uint8_t)value;
+    applyBrightness(currentBrightness);      // 0 -> OFF via power-save, >0 -> set contrast
+  }
 }
+
 
 // ===================== Display rendering =====================
 static void drawSplash() {
