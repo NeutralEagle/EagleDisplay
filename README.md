@@ -62,8 +62,8 @@ It provides a dark-mode web UI (with WiFiManager captive portal), a live brightn
   </li>
   <li><strong>UDP telemetry (sender):</strong> three small packets:
     <ul>
-      <li><code>T</code> + temperature (°C)</li>
-      <li><code>H</code> + humidity (%RH)</li>
+      <li><code>T</code> + temperature (°C)</li> //disabled, enable by uncommenting it
+      <li><code>H</code> + humidity (%RH)</li> //disabled, enable by uncommenting it
       <li><code>C</code> + CO₂ (ppm)</li>
     </ul>
   </li>
@@ -95,7 +95,7 @@ It provides a dark-mode web UI (with WiFiManager captive portal), a live brightn
 
 <h2>First run</h2>
 <ol>
-  <li>On boot, the device starts an AP <strong>D1Mini-Setup</strong> (password <code>config123</code>) if it can’t join Wi-Fi.</li>
+  <li>On boot, the device starts an AP <strong>EagleDisplay</strong> (password <code>config123</code>) if it can’t join Wi-Fi.</li>
   <li>Visit <code>http://192.168.4.1/</code> to configure Wi-Fi (captive portal).</li>
   <li>After connecting to your network, open the device’s IP to access the web UI.</li>
 </ol>
