@@ -112,7 +112,7 @@ static void safeSendBuffer() {
 }
 
 // ===================== WiFi provisioning (dark portal) =====================
-const char* AP_SSID = "D1Mini-Setup";
+const char* AP_SSID = "EagleDisplay";
 const char* AP_PASS = "config123";
 
 const char* WM_DARK_CSS =
@@ -129,18 +129,9 @@ const char* WM_DARK_CSS =
   "hr{border-color:#2a2f36}"
   "</style>";
 
-static void startWifiWithPortal() {
-  WiFiManager wm;
-  wm.setDebugOutput(false);
-  wm.setTitle("D1 mini CO\u2082 (Dark)");
-  wm.setCustomHeadElement(WM_DARK_CSS);
-  wm.setConnectTimeout(30);
-  wm.setConfigPortalTimeout(180);
-  bool ok = wm.autoConnect(AP_SSID, AP_PASS);
-  if (!ok) {
-    wm.startConfigPortal(AP_SSID, AP_PASS);
-  }
-}
+
+
+
 
 // ===================== Web server (dark) =====================
 static String htmlHeader() {
@@ -311,19 +302,106 @@ static void pollUdpBrightness() {
 
 
 // ===================== Display rendering =====================
-static void drawSplash() {
+// Shared internal helper
+static void drawSplashInternal(const char* line1, const char* line2, int durationMs) {
   // Hard-wake + draw once
-  u8g2.setPowerSave(0);                             // ensure panel ON
+  u8g2.setPowerSave(0);                              // ensure panel ON
   u8g2.setContrast(clamp255((int)(60 * 255 / 100))); // ~60% just for splash
-  delay(30);                                        // let charge pump settle
+  delay(30);                                         // let charge pump settle
 
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_6x13_tf);
-  u8g2.drawStr(0, 14, "CO2 Monitor");
-  u8g2.drawStr(0, 30, "WiFi connecting...");
+
+  if (line2 == nullptr) {
+    // Single line - bigger font, centered
+    u8g2.setFont(u8g2_font_8x13B_tf);
+    int textWidth = u8g2.getStrWidth(line1);
+    int x = (u8g2.getDisplayWidth() - textWidth) / 2;
+    int y = (u8g2.getDisplayHeight() / 2) + 5; // vertical centering tweak
+    u8g2.drawStr(x, y, line1);
+  } else {
+    // Two lines - smaller font, stacked & centered
+    u8g2.setFont(u8g2_font_6x13_tf);
+    int textWidth1 = u8g2.getStrWidth(line1);
+    int textWidth2 = u8g2.getStrWidth(line2);
+    int x1 = (u8g2.getDisplayWidth() - textWidth1) / 2;
+    int x2 = (u8g2.getDisplayWidth() - textWidth2) / 2;
+    u8g2.drawStr(x1, 14, line1);
+    u8g2.drawStr(x2, 30, line2);
+  }
+
   u8g2.sendBuffer();
-  delay(1000);                                       // keep visible briefly
+
+  // Non-blocking wait to keep WiFi alive
+  unsigned long start = millis();
+  while (millis() - start < (unsigned long)durationMs) {
+    yield(); // let ESP8266 background tasks run (WiFi, webserver, etc.)
+  }
+  u8g2.setPowerSave(1);
+  
 }
+
+// Overload for one string
+static void drawSplash(const char* line1, int durationMs = 1000) {
+  drawSplashInternal(line1, nullptr, durationMs);
+}
+
+// Overload for two strings
+static void drawSplash(const char* line1, const char* line2, int durationMs = 1000) {
+  drawSplashInternal(line1, line2, durationMs);
+}
+
+static void startWifiWithPortal() {
+  WiFiManager wm;
+  wm.setDebugOutput(false);
+  wm.setTitle("EagleDisplay");
+  wm.setCustomHeadElement(WM_DARK_CSS);
+  wm.setConnectTimeout(30);
+  wm.setConfigPortalTimeout(180);
+  wm.setConfigPortalBlocking(false);   // <-- important: non-blocking mode
+
+  if (!wm.autoConnect(AP_SSID, AP_PASS)) {
+    // Failed to connect, start portal in non-blocking mode
+    wm.startConfigPortal(AP_SSID, AP_PASS);
+
+    unsigned long lastSwitch = 0;
+    bool showIntro = true;
+
+    // Stay here until WiFi is connected
+    while (WiFi.status() != WL_CONNECTED) {
+      wm.process(); // keep portal running
+      yield();      // keep WiFi stack alive
+
+      unsigned long now = millis();
+      if (now - lastSwitch > 4000) { // rotate message every 4s
+        lastSwitch = now;
+        showIntro = !showIntro;
+
+        if (showIntro) {
+          drawSplash("Setup mode", "Connect to WiFi AP", 4000);
+        } else {
+          drawSplash(AP_SSID, AP_PASS, 4000);
+        }
+      }
+    }
+  }
+}
+
+
+// Returns current IP as String
+static String getLocalIPString() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return WiFi.localIP().toString();
+  } else {
+    return String("No WiFi");
+  }
+}
+
+// Show current IP on splash screen
+static void showIP(int durationMs = 2000) {
+  String ipStr = getLocalIPString();
+  drawSplash(ipStr.c_str(), durationMs);
+}
+
 
 
 
@@ -344,6 +422,8 @@ static void drawReadings(float co2, float tempC, float rh) {
   yield();
 }
 
+
+
 // ===================== Setup / Loop =====================
 void setup() {
   Serial.begin(115200);
@@ -354,11 +434,11 @@ void setup() {
 
   // I2C
   Wire.begin();
-  Wire.setClock(100000);            // 100 kHz for robustness (try 400 kHz later if you wish)
+  Wire.setClock(100000);
 
   // Display
   u8g2.begin();
-  drawSplash();                 // show while panel is ON
+  drawSplash("CO2 Monitor", "WiFi connecting...",2000);                 // show while panel is ON
 
   currentBrightness = 0;        // now apply your default OFF
   applyBrightness(currentBrightness);
@@ -376,6 +456,8 @@ void setup() {
   // UDP
   udpTx.begin(0);                   // ephemeral local port for TX
   udpRx.begin(cfg.udpListenPort);   // listen for brightness
+
+  showIP(5000);
 
   // SCD30
   if (!scd30.begin()) {
