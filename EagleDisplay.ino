@@ -138,7 +138,7 @@ static String htmlHeader() {
   String s =
     "<!DOCTYPE html><html><head><meta charset='utf-8'>"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<title>D1 mini CO2 Monitor</title>"
+    "<title>EagleDisplay</title>"
     "<style>"
     ":root{--bg:#0b0d10;--bg2:#111418;--fg:#e6e6e6;--muted:#b8c0cc;--line:#2a2f36;--accent:#8ab4f8;--btn:#1f2933;--btnh:#2b3845}"
     "html,body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial;margin:0}"
@@ -172,7 +172,7 @@ static void handleApiBrightness() {
 
 static void handleRoot() {
   String s = htmlHeader();
-  s += "<h2>D1 mini CO₂ Monitor</h2>";
+  s += "<h2>EagleDisplay</h2>";
 
   // status card
   s += "<div class='card'><b>Status</b><br/>";
@@ -352,6 +352,7 @@ static void drawSplash(const char* line1, const char* line2, int durationMs = 10
 
 static void startWifiWithPortal() {
   WiFiManager wm;
+  WiFi.hostname("EagleDisplay");
   wm.setDebugOutput(false);
   wm.setTitle("EagleDisplay");
   wm.setCustomHeadElement(WM_DARK_CSS);
